@@ -15,6 +15,16 @@ def apply_filter(signal, cutoff, fs, order=5, filter_type='low'):
         st.error(f"Error in filtering: {e}")
         return signal
 
+# Function for time-domain analysis
+def time_domain_analysis(signal):
+    return {
+        "Mean": np.mean(signal),
+        "Standard Deviation": np.std(signal),
+        "RMS": np.sqrt(np.mean(signal**2)),
+        "Peak-to-Peak": np.ptp(signal),
+        "Zero-Crossing Rate": np.mean(np.diff(np.sign(signal)) != 0)
+    }
+
 # Initialize session state
 if 'processed_data' not in st.session_state:
     st.session_state.processed_data = {}
@@ -41,30 +51,40 @@ if uploaded_files:
     if selected_datasets:
         for name in selected_datasets:
             df = dfs[name]
-            with st.expander(f"⚙️ Preprocessing: {name}"):
+            with st.expander(f"⚙️ Preprocessing & Analysis: {name}"):
                 fs = st.number_input(f"Sampling frequency (Hz) for {name}", 1, 500, 100, key=f"fs_{name}")
                 df['normalized'] = (df['amplitude'] - df['amplitude'].min()) / (df['amplitude'].max() - df['amplitude'].min())
-                
+
+                # Display time-domain analysis for raw signal
+                st.subheader("📈 Time-Domain Analysis (Raw Data)")
+                analysis = time_domain_analysis(df['amplitude'])
+                st.json(analysis)
+
                 # Resampling
                 new_fs = st.slider(f"Resampling Frequency (Hz) for {name}", 1, fs, fs, key=f"resample_{name}")
                 if new_fs != fs:
                     resampled_signal = resample(df['amplitude'], int(len(df) * new_fs / fs))
-                    resampled_df = pd.DataFrame({'amplitude': resampled_signal})  # Create new DataFrame
-                    df = df.iloc[:len(resampled_signal)]  # Trim original DataFrame to match resampled length
+                    resampled_df = pd.DataFrame({'amplitude': resampled_signal})  
+                    df = df.iloc[:len(resampled_signal)]  
                     df['resampled'] = resampled_signal
-                
+
                 # Filtering
                 filter_type = st.selectbox(f"Filter Type for {name}", ["low", "high", "band"], key=f"filter_type_{name}")
                 if filter_type == "band":
                     cutoff = st.slider(f"Band-pass Cutoff (Hz) for {name}", 1, fs // 2, (10, 50), key=f"cutoff_{name}")
                 else:
                     cutoff = st.slider(f"Cutoff Frequency (Hz) for {name}", 1, fs // 2, 10, key=f"cutoff_{name}")
-                
+
                 if st.button(f"Apply Filter for {name}"):
                     df['filtered'] = apply_filter(df['amplitude'], cutoff, fs, filter_type=filter_type)
                     st.session_state.processed_data[name] = df
                     st.success(f"Filter applied to {name}!")
-        
+
+                    # Display time-domain analysis for filtered signal
+                    st.subheader("📉 Time-Domain Analysis (Filtered Data)")
+                    filtered_analysis = time_domain_analysis(df['filtered'])
+                    st.json(filtered_analysis)
+
         # Comparison
         with st.expander("📊 Compare Signals", expanded=True):
             comparison_options = st.multiselect("Select data to compare", ["Raw Data", "Filtered Data"], default=["Raw Data", "Filtered Data"])
