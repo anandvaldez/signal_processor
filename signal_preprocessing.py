@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from scipy.signal import butter, filtfilt, resample
+from scipy.fftpack import fft, fftfreq
 
 # Function to apply a filter
 def apply_filter(signal, cutoff, fs, order=5, filter_type='low'):
@@ -24,6 +25,14 @@ def time_domain_analysis(signal):
         "Peak-to-Peak": np.ptp(signal),
         "Zero-Crossing Rate": np.mean(np.diff(np.sign(signal)) != 0)
     }
+
+# Function for FFT analysis
+def compute_fft(signal, fs):
+    signal = np.asarray(signal)  # Ensure NumPy array
+    N = len(signal)
+    freq = fftfreq(N, d=1/fs)[:N//2]  # Only positive frequencies
+    fft_values = np.abs(fft(signal)[:N//2])  # Magnitude spectrum
+    return freq, fft_values
 
 # Initialize session state
 if 'processed_data' not in st.session_state:
@@ -55,7 +64,7 @@ if uploaded_files:
                 fs = st.number_input(f"Sampling frequency (Hz) for {name}", 1, 500, 100, key=f"fs_{name}")
                 df['normalized'] = (df['amplitude'] - df['amplitude'].min()) / (df['amplitude'].max() - df['amplitude'].min())
 
-                # Display time-domain analysis for raw signal
+                # Time-domain analysis
                 st.subheader("📈 Time-Domain Analysis (Raw Data)")
                 analysis = time_domain_analysis(df['amplitude'])
                 st.json(analysis)
@@ -64,8 +73,8 @@ if uploaded_files:
                 new_fs = st.slider(f"Resampling Frequency (Hz) for {name}", 1, fs, fs, key=f"resample_{name}")
                 if new_fs != fs:
                     resampled_signal = resample(df['amplitude'], int(len(df) * new_fs / fs))
-                    resampled_df = pd.DataFrame({'amplitude': resampled_signal})  
-                    df = df.iloc[:len(resampled_signal)]  
+                    resampled_df = pd.DataFrame({'amplitude': resampled_signal})
+                    df = df.iloc[:len(resampled_signal)]
                     df['resampled'] = resampled_signal
 
                 # Filtering
@@ -80,10 +89,18 @@ if uploaded_files:
                     st.session_state.processed_data[name] = df
                     st.success(f"Filter applied to {name}!")
 
-                    # Display time-domain analysis for filtered signal
+                    # Time-domain analysis for filtered signal
                     st.subheader("📉 Time-Domain Analysis (Filtered Data)")
                     filtered_analysis = time_domain_analysis(df['filtered'])
                     st.json(filtered_analysis)
+
+                # FFT Analysis
+                st.subheader("🔍 Frequency-Domain Analysis (FFT)")
+                freq, fft_values = compute_fft(df['amplitude'], fs)
+                fig_fft = go.Figure()
+                fig_fft.add_trace(go.Scatter(x=freq, y=fft_values, mode='lines', name=f'FFT: {name}'))
+                fig_fft.update_layout(title="FFT Spectrum", xaxis_title="Frequency (Hz)", yaxis_title="Magnitude", hovermode="x unified")
+                st.plotly_chart(fig_fft, use_container_width=True)
 
         # Comparison
         with st.expander("📊 Compare Signals", expanded=True):
