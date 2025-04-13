@@ -4,8 +4,11 @@ import numpy as np
 import plotly.graph_objects as go
 from scipy.signal import butter, filtfilt, resample
 from scipy.fftpack import fft, fftfreq
+import zipfile
+from io import BytesIO
 
 # Function to apply a filter
+@st.cache_data
 def apply_filter(signal, cutoff, fs, order=5, filter_type='low'):
     try:
         nyquist = 0.5 * fs
@@ -33,6 +36,16 @@ def compute_fft(signal, fs):
     freq = fftfreq(N, d=1/fs)[:N//2]  # Only positive frequencies
     fft_values = np.abs(fft(signal)[:N//2])  # Magnitude spectrum
     return freq, fft_values
+
+# Create a ZIP file for processed data download
+def create_zip():
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zip_file:
+        for name, data in st.session_state.processed_data.items():
+            csv = data.to_csv(index=False).encode("utf-8")
+            zip_file.writestr(f"processed_{name}.csv", csv)
+    buffer.seek(0)
+    return buffer
 
 # Initialize session state
 if 'processed_data' not in st.session_state:
@@ -123,3 +136,8 @@ if uploaded_files:
             for name in st.session_state.processed_data:
                 csv = st.session_state.processed_data[name].to_csv(index=False).encode('utf-8')
                 st.download_button(f"Download {name}", data=csv, file_name=f"processed_{name}.csv", mime="text/csv")
+
+        # Download All Processed Data as ZIP
+        with st.expander("⬇️ Download All Processed Data (ZIP)"):
+            zip_file = create_zip()
+            st.download_button("Download Processed Data (ZIP)", zip_file, file_name="processed_data.zip", mime="application/zip")
